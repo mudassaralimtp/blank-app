@@ -39,7 +39,7 @@ import xgboost as xgb
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import (
-    DATA_DIR, MODEL_DIR, HISTORICAL_DAYS,
+    BASE_DIR, DATA_DIR, MODEL_DIR, HISTORICAL_DAYS,
     TRAIN_RATIO, VAL_RATIO,
     DEFAULT_UP_THRESHOLD, DEFAULT_DOWN_THRESHOLD,
 )
@@ -197,7 +197,7 @@ def run_training(days: int = HISTORICAL_DAYS):
         test_results[name] = metrics
 
         registry[name] = {
-            "path":           str(model_path),
+            "path":           str(model_path.relative_to(BASE_DIR)),
             "trained_at":     datetime.now(timezone.utc).isoformat(),
             "n_train":        int(len(y_train)),
             "n_val":          int(len(y_val)),
@@ -217,8 +217,8 @@ def run_training(days: int = HISTORICAL_DAYS):
     best_name = max(test_results, key=lambda k: test_results[k].get("roc_auc") or 0)
     best_path = MODEL_DIR / f"{best_name}.joblib"
 
-    # Write a "current_model" pointer
-    pointer = {"model_name": best_name, "path": str(best_path)}
+    # Write a "current_model" pointer (relative path so it works on cloud too)
+    pointer = {"model_name": best_name, "path": str(best_path.relative_to(BASE_DIR))}
     with open(MODEL_DIR / "current_model.json", "w") as f:
         json.dump(pointer, f, indent=2)
     log.info("Best model: %s (ROC-AUC=%.4f) → set as current model",
