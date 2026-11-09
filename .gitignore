@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Data cache (large parquet files, re-downloadable)
+data/cache/
+
+# Trained models (re-trainable)
+models/saved/
+
+# Database (local prediction log)
+predictions.db
+
+# Reports
+reports/
+
+# Environment variables
+.env
+.env.*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+.agents/
+.claude/
