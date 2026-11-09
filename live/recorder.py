@@ -111,9 +111,21 @@ class PredictionRecorder:
     ) -> Optional[str]:
         """
         Fill in the actual outcome for a previously recorded prediction.
+
+        actual_direction is determined strictly by the Binance 5m candle:
+            close > open  → UP
+            close < open  → DOWN
+            close == open → DOJI  (unscored — correct stays NULL)
+
         Returns the signal that was recorded, or None if row not found.
         """
-        actual_direction = "UP" if actual_close > actual_open else "DOWN"
+        if actual_close > actual_open:
+            actual_direction = "UP"
+        elif actual_close < actual_open:
+            actual_direction = "DOWN"
+        else:
+            actual_direction = "DOJI"   # open == close, no direction to score
+
         now = datetime.now(timezone.utc).isoformat()
 
         # Fetch the signal we predicted
@@ -130,7 +142,8 @@ class PredictionRecorder:
 
         signal = row[0]
         correct: Optional[int] = None
-        if signal != "SKIP":
+        # Only score when we made a directional call AND the candle has a clear direction
+        if signal != "SKIP" and actual_direction != "DOJI":
             correct = 1 if signal == actual_direction else 0
 
         sql = """

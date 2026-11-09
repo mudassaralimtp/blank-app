@@ -303,15 +303,49 @@ st.subheader(f"Last {RECENT_PREDICTIONS_SHOWN} Predictions")
 
 if not recent.empty:
     display = recent[[
-        "candle_open_time", "model_version", "signal", "prob_up",
-        "actual_direction", "correct", "predicted_at",
+        "candle_open_time", "signal", "prob_up",
+        "actual_direction", "correct",
+        "model_version", "predicted_at",
     ]].copy()
+
     display["prob_up"] = display["prob_up"].map("{:.4f}".format)
     display["candle_open_time"] = display["candle_open_time"].str[:16]
     display["predicted_at"]     = display["predicted_at"].str[:16]
-    display["correct"] = display["correct"].map(
-        lambda x: "✅" if x == 1 else ("❌" if x == 0 else "—")
-    )
+
+    # actual_direction: UP / DOWN / DOJI / (pending)
+    def _fmt_direction(x):
+        if not x or not isinstance(x, str) or x != x:  # None / NaN / empty
+            return "(pending)"
+        return x  # UP, DOWN, DOJI as-is
+
+    display["actual_direction"] = display["actual_direction"].apply(_fmt_direction)
+
+    # Result: compare signal vs actual_direction explicitly
+    def _fmt_result(row):
+        sig = row["signal"]
+        act = row["actual_direction"]
+        if act == "(pending)":
+            return "⏳"
+        if sig == "SKIP" or act == "DOJI":
+            return "—"
+        return "✅" if sig == act else "❌"
+
+    display["result"] = display.apply(_fmt_result, axis=1)
+
+    # Drop the raw correct column (replaced by result)
+    display = display.drop(columns=["correct"])
+
+    # Rename for readability
+    display = display.rename(columns={
+        "candle_open_time": "Candle (UTC)",
+        "signal":           "Prediction",
+        "prob_up":          "P(UP)",
+        "actual_direction": "Actual (Binance 5m)",
+        "result":           "Result",
+        "model_version":    "Model",
+        "predicted_at":     "Predicted At",
+    })
+
     st.dataframe(display, use_container_width=True, height=400)
 
     # Rolling accuracy chart

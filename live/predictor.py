@@ -224,17 +224,78 @@ def make_prediction(
 # Resolve outcome after candle closes
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _fetch_5m_candle_by_open(candle_open: datetime) -> Optional[dict]:
+    """
+    Fetch the exact closed Binance 5-min candle whose open_time == candle_open.
+
+    Key points:
+    - Uses startTime + endTime query params instead of filtering a DataFrame,
+      so the result is always the right candle regardless of how many recent
+      candles exist.
+    - endTime = start_ms + 299_999 (the candle's own close_time in ms).
+      Using start_ms + 300_000 would equal the NEXT candle's open_time —
+      Binance endTime is inclusive, which would make the window span two candles.
+    - Returns None if Binance returns an empty response, the wrong candle,
+      or a candle whose close_time doesn't match a finalised bar.
+    """
+    start_ms = int(candle_open.timestamp() * 1000)
+    end_ms   = start_ms + CANDLE_DURATION_SECONDS * 1000 - 1  # = close_time of this candle
+
+    url = f"{BINANCE_BASE_URL}/api/v3/klines"
+    params = {
+        "symbol":    SYMBOL,
+        "interval":  "5m",
+        "startTime": start_ms,
+        "endTime":   end_ms,
+        "limit":     1,
+    }
+    resp = requests.get(url, params=params, timeout=10)
+    resp.raise_for_status()
+    raw = resp.json()
+
+    if not raw:
+        return None
+
+    r = raw[0]
+    kline_open_ms  = int(r[0])
+    kline_close_ms = int(r[6])
+
+    # Must be the candle we asked for (allow 500 ms tolerance)
+    if abs(kline_open_ms - start_ms) > 500:
+        log.warning("open_time mismatch: expected=%d got=%d", start_ms, kline_open_ms)
+        return None
+
+    # close_time must equal start_ms + 299_999 — rejects still-open candles
+    expected_close_ms = start_ms + CANDLE_DURATION_SECONDS * 1000 - 1
+    if abs(kline_close_ms - expected_close_ms) > 500:
+        log.warning("candle not finalised: close_time expected=%d got=%d",
+                    expected_close_ms, kline_close_ms)
+        return None
+
+    return {
+        "open":  float(r[1]),
+        "high":  float(r[2]),
+        "low":   float(r[3]),
+        "close": float(r[4]),
+    }
+
+
 def resolve_candle(candle_open: datetime, recorder: PredictionRecorder):
-    """Fetch the closed 5-min Binance candle and resolve the stored prediction."""
+    """
+    Fetch the closed Binance 5-min candle by its exact open timestamp
+    and write the actual outcome to the prediction log.
+
+    actual_direction = UP   if Binance candle close > open
+    actual_direction = DOWN if Binance candle close < open
+    actual_direction = DOJI if Binance candle close == open  (unscored)
+    """
     try:
-        df = _get_closed_klines_before("5m", before_ts=datetime.now(timezone.utc), limit=5)
-        row = df[df["open_time"] == candle_open]
-        if row.empty:
-            log.warning("5-min candle not found for %s", candle_open.isoformat())
+        candle = _fetch_5m_candle_by_open(candle_open)
+        if candle is None:
+            log.warning("5-min candle not available for %s — prediction stays unresolved",
+                        candle_open.isoformat())
             return
-        actual_open  = float(row.iloc[0]["open"])
-        actual_close = float(row.iloc[0]["close"])
-        recorder.resolve_prediction(candle_open, actual_open, actual_close)
+        recorder.resolve_prediction(candle_open, candle["open"], candle["close"])
     except Exception as exc:
         log.error("Failed to resolve candle %s: %s", candle_open.isoformat(), exc)
 
