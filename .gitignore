@@ -18,6 +18,7 @@ models/saved/
 
 # Database (local prediction log)
 predictions.db
+predictions.db.*
 
 # Reports
 reports/
