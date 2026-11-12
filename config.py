@@ -57,5 +57,5 @@ PREDICTION_OFFSET_SECONDS = 240
 CANDLE_DURATION_SECONDS   = 300   # 5 min
 
 # ── Dashboard ─────────────────────────────────────────────────────────────────
-DASHBOARD_REFRESH_SECONDS = 10
+DASHBOARD_REFRESH_SECONDS = 3
 RECENT_PREDICTIONS_SHOWN  = 50
